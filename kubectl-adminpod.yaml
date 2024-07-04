@@ -1,3 +1,4 @@
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -31,6 +32,7 @@ rules:
   - apiGroups: ["admissionregistration.k8s.io"]
     resources: ["*"]
     verbs: ["*"]
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -44,12 +46,15 @@ roleRef:
   kind: ClusterRole
   name: admin-role
   apiGroup: rbac.authorization.k8s.io
+
 ---
 apiVersion: v1
 kind: Pod
 metadata:
   name: kubectl-adminpod
   namespace: default
+  labels:
+    app: kubectl-adminpod  # Adding label here
 spec:
   serviceAccountName: admin-sa
   containers:
@@ -60,8 +65,28 @@ spec:
         - "-c"
         - |
           apt-get update -y \
-          && apt-get install -y curl \
+          && apt-get install -y curl python3-pip \
           && curl -LO https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl \
           && chmod 777 ./kubectl \
           && mv ./kubectl /usr/local/bin/kubectl \
-          && sleep infinity
+          && curl -o /kubectl-api.py https://raw.githubusercontent.com/vinaykumargudi/kubectl-buddy/main/kubectl-api.py \
+          && pip install flask \
+          && FLASK_APP=/kubectl-api.py flask run --host=0.0.0.0 --port=5000
+      ports:
+        - containerPort: 5000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubectl-admin-service
+  namespace: default
+spec:
+  type: NodePort
+  selector:
+    app: kubectl-adminpod  # Matching the label of the Pod
+  ports:
+    - protocol: TCP
+      port: 5000
+      targetPort: 5000
+      nodePort: 30007
